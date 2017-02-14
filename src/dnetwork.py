@@ -35,6 +35,9 @@ class dlist(list):
     def batch(self, batch_size):
         return dlist(dlist(self[k:k + batch_size]) for k in range(0, len(self), batch_size))
 
+    def map(self, f):
+        return dlist(f(item) for item in self)
+
 
 class Network(object):
 
@@ -64,7 +67,7 @@ class Network(object):
 
 
     def SGD(self, training_data, epochs, mini_batch_size, eta,
-            test_data=None):
+            test_data):
         """Train the neural network using mini-batch stochastic
         gradient descent.  The ``training_data`` is a list of tuples
         ``(x, y)`` representing the training inputs and the desired
@@ -73,7 +76,7 @@ class Network(object):
         network will be evaluated against the test data after each
         epoch, and partial progress printed out.  This is useful for
         tracking progress, but slows things down substantially."""
-        if test_data: n_test = len(test_data)
+        n_test = len(test_data)
         n = len(training_data)
 
         def update_mini_batch_loop(mini_batch):
@@ -85,11 +88,9 @@ class Network(object):
             .batch(mini_batch_size) \
             .loop(update_mini_batch_loop)
 
-            if test_data:
-                print "Epoch {0}: {1} / {2}".format(
-                    j, self.evaluate(test_data), n_test)
-            else:
-                print "Epoch {0} complete".format(j)
+            # I don't want people to have to write print/log statements
+            print "Epoch {0}: {1} / {2}".format(
+                j, self.evaluate(test_data), n_test)
 
         dlist(range(epochs)) \
             .loop(sgd_loop)
@@ -99,8 +100,10 @@ class Network(object):
         gradient descent using backpropagation to a single mini batch.
         The ``mini_batch`` is a list of tuples ``(x, y)``, and ``eta``
         is the learning rate."""
-        nabla_b = [np.zeros(b.shape) for b in self.biases]
-        nabla_w = [np.zeros(w.shape) for w in self.weights]
+        nabla_b = dlist(self.biases) \
+            .map(lambda b: np.zeros(b.shape))
+        nabla_w = dlist(self.weights) \
+            .map(lambda w: np.zeros(w.shape))
         for x, y in mini_batch:
             delta_nabla_b, delta_nabla_w = self.backprop(x, y)
             nabla_b = [nb+dnb for nb, dnb in zip(nabla_b, delta_nabla_b)]
