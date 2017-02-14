@@ -120,6 +120,21 @@ def devaluate(test_data, weights, biases):
     return sum(int(x == y) for (x, y) in test_results)
 
 
+def sgd_loop(j, eta=None, num_layers=None, weights=None, biases=None, training_data=None, mini_batch_size=None, test_data=None, n_test=None):
+    results = \
+        dlist(training_data) \
+        .shuffle() \
+        .batch(mini_batch_size) \
+        .loop(dupdate_mini_batch, eta=eta, num_layers=num_layers, weights=weights, biases=biases)
+    # I don't want people to have to write print/log statements
+    print "Epoch {0}: {1} / {2}".format(
+        j, devaluate(test_data, results['weights'], results['biases']), n_test)
+    results['training_data'] = training_data
+    results['mini_batch_size'] = mini_batch_size
+    results['test_data'] = test_data
+    results['n_test'] = n_test
+    return results
+
 class Network(object):
 
     def __init__(self, sizes):
@@ -159,22 +174,10 @@ class Network(object):
         tracking progress, but slows things down substantially."""
         n_test = len(test_data)
         n = len(training_data)
-
-        def sgd_loop(j, eta=None, num_layers=None, weights=None, biases=None):
-            results = \
-                dlist(training_data) \
-                .shuffle() \
-                .batch(mini_batch_size) \
-                .loop(dupdate_mini_batch, eta=eta, num_layers=num_layers, weights=weights, biases=biases)
-            self.weights = results['weights']
-            self.biases = results['biases']
-            # I don't want people to have to write print/log statements
-            print "Epoch {0}: {1} / {2}".format(
-                j, devaluate(test_data, results['weights'], results['biases']), n_test)
-            return results
-
         dlist(range(epochs)) \
-            .loop(sgd_loop, eta=eta, num_layers=self.num_layers, weights=self.weights, biases=self.biases)
+            .loop(sgd_loop, eta=eta, num_layers=self.num_layers, weights=self.weights, biases=self.biases,
+            training_data=training_data, mini_batch_size=mini_batch_size, test_data=test_data, n_test=n_test
+            )
 
     def update_mini_batch(self, mini_batch, eta):
         """Update the network's weights and biases by applying
