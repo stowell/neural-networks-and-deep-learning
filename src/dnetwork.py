@@ -103,6 +103,23 @@ def dcost_derivative(output_activations, y):
     return (output_activations-y)
 
 
+def dfeedforward(a, weights, biases):
+    """Return the output of the network if ``a`` is input."""
+    for b, w in zip(biases, weights):
+        a = sigmoid(np.dot(w, a)+b)
+    return a
+
+
+def devaluate(test_data, weights, biases):
+    """Return the number of test inputs for which the neural
+    network outputs the correct result. Note that the neural
+    network's output is assumed to be the index of whichever
+    neuron in the final layer has the highest activation."""
+    test_results = [(np.argmax(dfeedforward(x, weights, biases)), y)
+                    for (x, y) in test_data]
+    return sum(int(x == y) for (x, y) in test_results)
+
+
 class Network(object):
 
     def __init__(self, sizes):
@@ -153,7 +170,7 @@ class Network(object):
             self.biases = results['biases']
             # I don't want people to have to write print/log statements
             print "Epoch {0}: {1} / {2}".format(
-                j, self.evaluate(test_data), n_test)
+                j, devaluate(test_data, results['weights'], results['biases']), n_test)
             return results
 
         dlist(range(epochs)) \
@@ -239,7 +256,7 @@ def sigmoid_prime(z):
 def main():
     net = Network([784, 30, 10])
     training_data, validation_data, test_data = mnist_loader.load_data_wrapper()
-    net.SGD(training_data, 10, 10, 3.0, test_data=test_data)
+    net.SGD(training_data, 4, 10, 3.0, test_data=test_data)
 
 
 if __name__ == '__main__':
