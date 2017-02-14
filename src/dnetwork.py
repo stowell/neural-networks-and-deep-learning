@@ -23,10 +23,11 @@ class dlist(list):
     def __init__(self, iterable=None):
         super(dlist, self).__init__(iterable)
 
-    def loop(self, f):
+    def loop(self, f, **initial_args):
+        previous_result = initial_args
         for item in self:
-            f(item)
-        return self
+            previous_result = f(item, **previous_result)
+        return previous_result
 
     def shuffle(self):
         random.shuffle(self)
@@ -37,6 +38,69 @@ class dlist(list):
 
     def map(self, f):
         return dlist(f(item) for item in self)
+
+
+def dupdate_mini_batch(mini_batch, eta=None, num_layers=None, weights=None, biases=None):
+    nabla_b = dlist(biases) \
+        .map(lambda b: np.zeros(b.shape))
+    nabla_w = dlist(weights) \
+        .map(lambda w: np.zeros(w.shape))
+    for x, y in mini_batch:
+        delta_nabla_b, delta_nabla_w = dbackprop(x, y, biases, weights, num_layers)
+        nabla_b = [nb+dnb for nb, dnb in zip(nabla_b, delta_nabla_b)]
+        nabla_w = [nw+dnw for nw, dnw in zip(nabla_w, delta_nabla_w)]
+    new_weights = [w-(eta/len(mini_batch))*nw
+                    for w, nw in zip(weights, nabla_w)]
+    new_biases = [b-(eta/len(mini_batch))*nb
+                   for b, nb in zip(biases, nabla_b)]
+    return {
+        'eta': eta,
+        'num_layers': num_layers,
+        'weights': new_weights,
+        'biases': new_biases,
+    }
+
+
+def dbackprop(x, y, biases, weights, num_layers):
+   """Return a tuple ``(nabla_b, nabla_w)`` representing the
+   gradient for the cost function C_x.  ``nabla_b`` and
+   ``nabla_w`` are layer-by-layer lists of numpy arrays, similar
+   to ``self.biases`` and ``self.weights``."""
+   nabla_b = [np.zeros(b.shape) for b in biases]
+   nabla_w = [np.zeros(w.shape) for w in weights]
+   # feedforward
+   activation = x
+   activations = [x] # list to store all the activations, layer by layer
+   zs = [] # list to store all the z vectors, layer by layer
+   for b, w in zip(biases, weights):
+       z = np.dot(w, activation)+b
+       zs.append(z)
+       activation = sigmoid(z)
+       activations.append(activation)
+   # backward pass
+   delta = dcost_derivative(activations[-1], y) * \
+       sigmoid_prime(zs[-1])
+   nabla_b[-1] = delta
+   nabla_w[-1] = np.dot(delta, activations[-2].transpose())
+   # Note that the variable l in the loop below is used a little
+   # differently to the notation in Chapter 2 of the book.  Here,
+   # l = 1 means the last layer of neurons, l = 2 is the
+   # second-last layer, and so on.  It's a renumbering of the
+   # scheme in the book, used here to take advantage of the fact
+   # that Python can use negative indices in lists.
+   for l in xrange(2, num_layers):
+       z = zs[-l]
+       sp = sigmoid_prime(z)
+       delta = np.dot(weights[-l+1].transpose(), delta) * sp
+       nabla_b[-l] = delta
+       nabla_w[-l] = np.dot(delta, activations[-l-1].transpose())
+   return (nabla_b, nabla_w)
+
+
+def dcost_derivative(output_activations, y):
+    """Return the vector of partial derivatives \partial C_x /
+    \partial a for the output activations."""
+    return (output_activations-y)
 
 
 class Network(object):
@@ -79,21 +143,21 @@ class Network(object):
         n_test = len(test_data)
         n = len(training_data)
 
-        def update_mini_batch_loop(mini_batch):
-            self.update_mini_batch(mini_batch, eta)
-
-        def sgd_loop(j):
-            dlist(training_data) \
-            .shuffle() \
-            .batch(mini_batch_size) \
-            .loop(update_mini_batch_loop)
-
+        def sgd_loop(j, eta=None, num_layers=None, weights=None, biases=None):
+            results = \
+                dlist(training_data) \
+                .shuffle() \
+                .batch(mini_batch_size) \
+                .loop(dupdate_mini_batch, eta=eta, num_layers=num_layers, weights=weights, biases=biases)
+            self.weights = results['weights']
+            self.biases = results['biases']
             # I don't want people to have to write print/log statements
             print "Epoch {0}: {1} / {2}".format(
                 j, self.evaluate(test_data), n_test)
+            return results
 
         dlist(range(epochs)) \
-            .loop(sgd_loop)
+            .loop(sgd_loop, eta=eta, num_layers=self.num_layers, weights=self.weights, biases=self.biases)
 
     def update_mini_batch(self, mini_batch, eta):
         """Update the network's weights and biases by applying
